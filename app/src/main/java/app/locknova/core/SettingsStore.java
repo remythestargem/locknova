@@ -28,6 +28,7 @@ public final class SettingsStore {
     private static final String KEY_LAUNCHER_DOCK = "launcher_dock";
     private static final String KEY_WIDGET_IDS = "launcher_widget_ids";
     private static final String KEY_ANIMATION_BACKUP = "animation_backup";
+    private static final String KEY_ROOT_SETTINGS_BACKUP = "root_systemui_backup";
     private static final String KEY_WALLPAPER_BACKUP_SYSTEM = "wallpaper_backup_system";
     private static final String KEY_WALLPAPER_BACKUP_LOCK = "wallpaper_backup_lock";
 
@@ -134,6 +135,16 @@ public final class SettingsStore {
     }
     public static void clearAnimationBackup(Context context) { prefs(context).edit().remove(KEY_ANIMATION_BACKUP).apply(); }
     public static boolean hasAnimationBackup(Context context) { return getAnimationBackup(context).length() > 0; }
+
+    public static JSONObject getRootSettingsBackup(Context context) {
+        String raw = prefs(context).getString(KEY_ROOT_SETTINGS_BACKUP, "{}");
+        try { return new JSONObject(raw); } catch (JSONException ignored) { return new JSONObject(); }
+    }
+    public static void setRootSettingsBackup(Context context, JSONObject backup) {
+        prefs(context).edit().putString(KEY_ROOT_SETTINGS_BACKUP, backup.toString()).apply();
+    }
+    public static void clearRootSettingsBackup(Context context) { prefs(context).edit().remove(KEY_ROOT_SETTINGS_BACKUP).apply(); }
+    public static boolean hasRootSettingsBackup(Context context) { return getRootSettingsBackup(context).length() > 0; }
 
     public static String getWallpaperBackupPath(Context context, boolean lock) {
         return prefs(context).getString(lock ? KEY_WALLPAPER_BACKUP_LOCK : KEY_WALLPAPER_BACKUP_SYSTEM, null);

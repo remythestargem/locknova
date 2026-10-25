@@ -14,12 +14,12 @@ public final class CustomizeScreen {
     private CustomizeScreen() { }
 
     private static final String[][] MODULES = {
-            {"status", "Status Bar", "Clock, date and icon appearance preview", "PREVIEW ONLY", "◉"},
+            {"status", "Status Bar", "Appearance preview + optional root icon controls", "PREVIEW + ROOT", "◉"},
             {"quick", "Quick Settings", "Tile layout preview and Android connectivity shortcut", "PREVIEW + SHORTCUT", "▦"},
             {"lock", "Lock Screen", "Wallpaper API, preview clock styles and native settings", "WALLPAPER API", "▣"},
             {"home", "Home Screen", "Real launcher, searchable app drawer and stacked Android widgets", "OPTIONAL LAUNCHER", "⌂"},
             {"gestures", "Gestures", "Test gestures in LockNova and open Android settings", "IN-APP TEST", "↔"},
-            {"system", "System UI", "Verified animation-scale operation through Shizuku", "SHIZUKU-DEPENDENT", "⌘"},
+            {"system", "System UI", "Root-backed Android settings + Shizuku fallback", "ROOT / SHIZUKU", "⌘"},
             {"appearance", "Appearance", "LockNova theme, accent and preview styling", "APP SETTINGS", "✦"},
             {"navigation", "Navigation & Display", "Shortcuts to Android display and launcher settings", "SYSTEM SHORTCUTS", "◫"}
     };

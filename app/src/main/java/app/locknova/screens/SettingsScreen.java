@@ -91,12 +91,12 @@ public final class SettingsScreen {
 
         UiKit.section(content, activity, "App behavior");
         LinearLayout behavior = UiKit.card(activity);
-        addSwitch(behavior, activity, "Smooth preview transitions", "Controls LockNova preview animation only.", SettingsStore.getMotion(activity), checked -> { SettingsStore.setMotion(activity, checked); activity.refreshScreen(); });
+        addSwitch(behavior, activity, "Smooth widget-stack transitions", "Controls animated paging between real Android widgets in LockNova Home.", SettingsStore.getMotion(activity), checked -> { SettingsStore.setMotion(activity, checked); activity.refreshScreen(); });
         addDivider(behavior, activity);
         addSwitch(behavior, activity, "Haptic feedback", "Enables haptics on supported LockNova buttons.", SettingsStore.getHaptics(activity), checked -> SettingsStore.setHaptics(activity, checked));
         UiKit.addCard(content, activity, behavior);
 
-        UiKit.section(content, activity, "Shizuku diagnostics");
+        UiKit.section(content, activity, "Shizuku fallback diagnostics");
         ShizukuBridge.State state = activity.getShizukuState();
         LinearLayout diagnostics = UiKit.card(activity);
         diagnostics.addView(UiKit.text(activity, state.message, 14, p.text, true));
@@ -165,6 +165,7 @@ public final class SettingsScreen {
         rowParams.bottomMargin = UiKit.dp(activity, 5);
         parent.addView(row, rowParams);
     }
+
     private static void addDivider(LinearLayout parent, MainActivity activity) {
         View divider = new View(activity);
         divider.setBackgroundColor(UiKit.palette(activity).border);
@@ -173,6 +174,7 @@ public final class SettingsScreen {
         params.bottomMargin = UiKit.dp(activity, 8);
         parent.addView(divider, params);
     }
+
     private static void addAction(LinearLayout parent, MainActivity activity, String title, String detail, Runnable action) {
         UiKit.Palette p = UiKit.palette(activity);
         LinearLayout row = UiKit.row(activity);
@@ -191,6 +193,7 @@ public final class SettingsScreen {
         rowParams.topMargin = UiKit.dp(activity, 14);
         parent.addView(row, rowParams);
     }
+
     private static void chooseTheme(MainActivity activity) {
         String[] values = {"Follow device", "Light", "Dark"};
         String[] keys = {"system", "light", "dark"};
@@ -202,6 +205,7 @@ public final class SettingsScreen {
             activity.refreshScreen();
         }).setNegativeButton("Cancel", null).show();
     }
+
     private static void chooseGrid(MainActivity activity) {
         String[] labels = {"3 columns", "4 columns", "5 columns", "6 columns"};
         int[] values = {3, 4, 5, 6};
@@ -232,6 +236,7 @@ public final class SettingsScreen {
             activity.refreshScreen();
         }).setNegativeButton("Cancel", null).show();
     }
+
     private static void confirmImport(MainActivity activity) {
         new AlertDialog.Builder(activity).setTitle("Import LockNova configuration?")
                 .setMessage("Import replaces the current LockNova theme, accent, launcher preferences, preview stack and custom presets. It does not change wallpapers, Android settings or Android widget bindings.")

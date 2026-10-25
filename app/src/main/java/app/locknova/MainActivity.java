@@ -44,7 +44,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
     private static final int REQUEST_IMAGE = 9001;
     private static final int REQUEST_EXPORT = 9002;
     private static final int REQUEST_IMPORT = 9003;
-
     private LinearLayout appRoot;
     private FrameLayout contentHost;
     private String destination = "Home";
@@ -74,22 +73,18 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         super.onStart();
         if (shizuku != null) shizuku.start();
     }
-
     @Override protected void onResume() {
         super.onResume();
         if (shizuku != null) shizuku.refresh();
     }
-
     @Override protected void onStop() {
         if (shizuku != null) shizuku.stop();
         super.onStop();
     }
-
     @Override protected void onDestroy() {
         io.shutdownNow();
         super.onDestroy();
     }
-
     @Override protected void onSaveInstanceState(Bundle out) {
         out.putString("destination", destination);
         out.putString("module", moduleId);
@@ -109,30 +104,21 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         });
     }
 
-    public ShizukuBridge.State getShizukuState() {
-        return shizukuState == null ? shizuku.getState() : shizukuState;
-    }
-
+    public ShizukuBridge.State getShizukuState() { return shizukuState == null ? shizuku.getState() : shizukuState; }
     public Uri getSelectedImage() { return selectedImage; }
+    public void executeSystemTask(Runnable task) { io.execute(task); }
 
     public void openLauncher() {
         try { startActivity(new Intent(this, LauncherActivity.class)); }
         catch (Exception ignored) { toast("LockNova Home could not be opened."); }
     }
-
-    public void navigate(String page) {
-        destination = page;
-        moduleId = null;
-        render();
-    }
-
+    public void navigate(String page) { destination = page; moduleId = null; render(); }
     public void openModule(String id) {
         destination = "Customize";
         moduleId = id;
         EventLog.add(this, "navigation", "Opened " + moduleTitle(id), "Customization module opened.");
         render();
     }
-
     public void refreshScreen() { render(); }
 
     private void render() {
@@ -196,10 +182,7 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
                     .setPositiveButton("Continue", (dialog, which) -> shizuku.requestPermission()).show();
             return;
         }
-        if (state.authorized) {
-            toast("Shizuku is connected and authorized.");
-            return;
-        }
+        if (state.authorized) { toast("Shizuku is connected and authorized."); return; }
         new AlertDialog.Builder(this).setTitle("Start Shizuku")
                 .setMessage("On Android 11, start Shizuku using Wireless debugging. Shizuku must be started again after a reboot. If ColorOS limits ADB permissions, its Developer options may require Permission monitoring to be disabled.")
                 .setNegativeButton("Setup guide", (dialog, which) -> openUrl("https://shizuku.rikka.app/guide/setup/"))
@@ -220,7 +203,7 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         String message = restore
                 ? "LockNova will write the three original Android animation-scale values it previously recorded, then read them back to verify restoration."
                 : "This changes Android's window, transition and animator scales to 0.5×. LockNova will read and save the original values, apply the change, verify each value and offer restoration. ColorOS may restrict or override these settings."
-                + "\n\nThis operation requires an active, authorized Shizuku connection.";
+                + "\n\nAfter you confirm, LockNova will use root if your device grants it; otherwise it will use an active, authorized Shizuku connection. If neither is available, nothing will be changed.";
         new AlertDialog.Builder(this).setTitle(title).setMessage(message)
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton(restore ? "Restore" : "Apply", (dialog, which) -> runAnimationOperation(restore)).show();
@@ -230,10 +213,7 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         io.execute(() -> {
             AnimationManager.Result result = restore ? AnimationManager.restore(this) : AnimationManager.reduce(this);
             EventLog.add(this, result.success ? (restore ? "restoration" : "system") : "failure", result.success ? (restore ? "Animations restored" : "Animations reduced") : "Animation operation failed", result.message);
-            runOnUiThread(() -> {
-                toast(result.message);
-                render();
-            });
+            runOnUiThread(() -> { toast(result.message); render(); });
         });
     }
 
@@ -246,17 +226,14 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
             catch (Exception ignored) { toast("Android Settings could not be opened."); }
         }
     }
-
     public void openConnectivityPanel() {
         try { startActivity(new Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY)); }
         catch (Exception e) { openSystemSettings(Settings.ACTION_SETTINGS); }
     }
-
     public void openUrl(String url) {
         try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
         catch (Exception ignored) { toast("No browser is available to open this link."); }
     }
-
     public void chooseWallpaper() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -264,7 +241,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         try { startActivityForResult(intent, REQUEST_IMAGE); }
         catch (Exception ignored) { toast("The system image picker could not be opened."); }
     }
-
     public void confirmWallpaperChange(int which) {
         if (selectedImage == null) { toast("Choose an image first."); return; }
         String target = which == WallpaperManager.FLAG_LOCK ? "lock-screen" : "home-screen";
@@ -273,7 +249,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Apply wallpaper", (dialog, button) -> applyWallpaper(which)).show();
     }
-
     public void applyWallpaper(int which) {
         Uri image = selectedImage;
         if (image == null) { toast("Choose an image first."); return; }
@@ -283,7 +258,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
             runOnUiThread(() -> { toast(result.message); render(); });
         });
     }
-
     public void confirmWallpaperRestore(int which) {
         new AlertDialog.Builder(this).setTitle("Restore previous wallpaper?")
                 .setMessage("LockNova will restore the private local backup, if it is still available, through Android's WallpaperManager.")
@@ -303,7 +277,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         try { startActivityForResult(intent, REQUEST_EXPORT); }
         catch (Exception ignored) { toast("The system document picker could not be opened."); }
     }
-
     public void startBackupImport() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -337,7 +310,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
             runOnUiThread(() -> toast("LockNova configuration exported."));
         } catch (Exception e) { runOnUiThread(() -> toast("Export failed: " + (e.getMessage() == null ? "document unavailable" : e.getMessage()))); }
     }
-
     private void importConfig(Uri uri) {
         try (InputStream input = getContentResolver().openInputStream(uri);
              BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
@@ -358,7 +330,6 @@ public final class MainActivity extends Activity implements ShizukuBridge.Listen
         toast("Applied “" + preset.name + "” to LockNova.");
         render();
     }
-
     public void toast(String message) { Toast.makeText(this, message, Toast.LENGTH_LONG).show(); }
 
     private static String moduleTitle(String id) {

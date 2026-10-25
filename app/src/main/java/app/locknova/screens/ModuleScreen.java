@@ -1,6 +1,7 @@
 package app.locknova.screens;
 
 import android.app.WallpaperManager;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.provider.Settings;
 import android.view.Gravity;
@@ -15,18 +16,21 @@ import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import app.locknova.MainActivity;
 import app.locknova.core.EventLog;
 import app.locknova.core.SettingsStore;
 import app.locknova.system.AnimationManager;
+import app.locknova.system.RootSettingsController;
 import app.locknova.system.ShizukuBridge;
 import app.locknova.system.WallpaperController;
 import app.locknova.ui.UiKit;
-import app.locknova.ui.WidgetStackView;
 
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 public final class ModuleScreen {
     private static final int[] ACCENTS = {0xFF7555D9, 0xFF9272EB, 0xFFBB6DD3, 0xFF4E7BCC, 0xFF39947D, 0xFF6A6B78};
@@ -54,7 +58,6 @@ public final class ModuleScreen {
         titleBlock.addView(subtitle, subtitleParams);
         content.addView(toolbar);
         UiKit.addGap(content, activity, 10);
-
         switch (id) {
             case "status": statusPage(content, activity); break;
             case "quick": quickPage(content, activity); break;
@@ -71,8 +74,8 @@ public final class ModuleScreen {
 
     private static void statusPage(LinearLayout content, MainActivity activity) {
         UiKit.Palette p = UiKit.palette(activity);
-        addPill(content, activity, "PREVIEW ONLY");
-        addInfo(content, activity, "A truthful status-bar concept", "An ordinary app cannot replace ColorOS's global status bar. Controls on this page update only the LockNova preview.");
+        addPill(content, activity, "PREVIEW + OPTIONAL ROOT");
+        addInfo(content, activity, "Your status bar, with honest limits", "The sample controls are previews. If root is granted, LockNova can also try Android's stored status-icon visibility setting; ColorOS may ignore or override it.");
         UiKit.section(content, activity, "Live preview");
         LinearLayout preview = UiKit.card(activity);
         preview.setBackground(UiKit.shape(p.surfaceAlt, p.border, 22, activity));
@@ -88,7 +91,6 @@ public final class ModuleScreen {
         demoParams.topMargin = UiKit.dp(activity, 16);
         preview.addView(demo, demoParams);
         UiKit.addCard(content, activity, preview);
-
         UiKit.section(content, activity, "Preview controls");
         LinearLayout controls = UiKit.card(activity);
         final String[] position = {"Center"};
@@ -109,16 +111,28 @@ public final class ModuleScreen {
         UiKit.addCard(content, activity, controls);
         TextView system = UiKit.button(activity, "Open Android display settings", false, v -> activity.openSystemSettings(Settings.ACTION_DISPLAY_SETTINGS));
         UiKit.addCard(content, activity, system);
+        UiKit.section(content, activity, "Optional root-backed Android setting");
+        LinearLayout rootCard = UiKit.card(activity);
+        rootCard.addView(UiKit.text(activity, "Hide selected status icons", 14, p.text, true));
+        TextView rootNote = UiKit.text(activity, "On Android SystemUI builds that honor it, this writes the secure icon_blacklist setting. LockNova saves the prior value and reads the new value back. It cannot guarantee ColorOS will render the change.", 12, p.muted, false);
+        LinearLayout.LayoutParams rootNoteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rootNoteParams.topMargin = UiKit.dp(activity, 6);
+        rootCard.addView(rootNote, rootNoteParams);
+        TextView editIcons = UiKit.button(activity, "Check root & choose icons", true, v -> editStatusIcons(activity));
+        LinearLayout.LayoutParams editParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        editParams.topMargin = UiKit.dp(activity, 11);
+        rootCard.addView(editIcons, editParams);
+        if (SettingsStore.hasRootSettingsBackup(activity)) addRestoreRootButton(rootCard, activity);
+        UiKit.addCard(content, activity, rootCard);
     }
 
-    // One holder avoids capturing an uninitialized local while wiring the preview button.
     private static final TextView[] positionButtonRef = new TextView[1];
     private static void positionButtonText(TextView button, String value) { if (button != null) button.setText("Clock position · " + value); }
 
     private static void quickPage(LinearLayout content, MainActivity activity) {
         UiKit.Palette p = UiKit.palette(activity);
-        addPill(content, activity, "LAYOUT PREVIEW");
-        addInfo(content, activity, "Quick Settings, as a concept", "ColorOS owns the actual notification shade. This preview cannot reorder, recolor or add system tiles.");
+        addPill(content, activity, "PREVIEW + OPTIONAL ROOT");
+        addInfo(content, activity, "Quick Settings, with a real system option", "The tile cards below are a preview. On Android builds that honor it, optional root access can move existing connectivity tiles to the front of the stored panel order; ColorOS may ignore or override that setting.");
         UiKit.section(content, activity, "Interactive tile layout preview");
         LinearLayout panel = UiKit.card(activity);
         panel.setBackground(UiKit.shape(p.surfaceAlt, p.border, SettingsStore.getQuickRound(activity), activity));
@@ -136,7 +150,6 @@ public final class ModuleScreen {
         gridHolder[0] = grid;
         layoutButtonRef[0] = layoutButton;
         UiKit.addCard(content, activity, layoutButton);
-
         UiKit.section(content, activity, "Preview style");
         LinearLayout radiusCard = UiKit.card(activity);
         TextView radiusTitle = UiKit.text(activity, "Tile corner radius", 13, p.text, true);
@@ -159,18 +172,108 @@ public final class ModuleScreen {
         radiusCard.addView(radius, seekParams);
         UiKit.addCard(content, activity, radiusCard);
         LinearLayout limits = UiKit.card(activity);
-        limits.addView(UiKit.text(activity, "Preview settings are stored in LockNova. System tile order, panel colors and layout are not changed.", 12, p.muted, false));
+        limits.addView(UiKit.text(activity, "This preview stores its own layout in LockNova. The separate optional root action may change Android's stored tile order if ColorOS honors it; panel colors and grid dimensions remain preview-only.", 12, p.muted, false));
         UiKit.addCard(content, activity, limits);
         UiKit.section(content, activity, "System shortcut");
         TextView open = UiKit.button(activity, "Open Android connectivity controls", true, v -> activity.openConnectivityPanel());
         UiKit.addCard(content, activity, open);
         TextView openNote = UiKit.text(activity, "This opens Android's internet connectivity panel when available; it does not open or modify the ColorOS tile editor.", 11, p.muted, false);
         content.addView(openNote);
+        UiKit.section(content, activity, "Optional root-backed tile order");
+        LinearLayout rootTiles = UiKit.card(activity);
+        rootTiles.addView(UiKit.text(activity, "Put connectivity tiles first", 14, p.text, true));
+        TextView rootTileNote = UiKit.text(activity, "This changes only Android's stored sysui_qs_tiles order: existing Wi-Fi, mobile, Bluetooth and airplane entries move first; every other tile remains in its current relative order. The previous value is saved and verified.", 12, p.muted, false);
+        LinearLayout.LayoutParams rootTileNoteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rootTileNoteParams.topMargin = UiKit.dp(activity, 6);
+        rootTiles.addView(rootTileNote, rootTileNoteParams);
+        TextView reorder = UiKit.button(activity, "Review tile reorder", true, v -> confirmQuickTileOrder(activity));
+        LinearLayout.LayoutParams reorderParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        reorderParams.topMargin = UiKit.dp(activity, 11);
+        rootTiles.addView(reorder, reorderParams);
+        if (SettingsStore.hasRootSettingsBackup(activity)) addRestoreRootButton(rootTiles, activity);
+        UiKit.addCard(content, activity, rootTiles);
+    }
+
+    private static void editStatusIcons(MainActivity activity) {
+        activity.executeSystemTask(() -> {
+            RootSettingsController.Result current = RootSettingsController.readStatusIcons();
+            activity.runOnUiThread(() -> {
+                if (!current.success) { Toast.makeText(activity, current.message, Toast.LENGTH_LONG).show(); return; }
+                String[] keys = RootSettingsController.STATUS_ICON_KEYS;
+                String[] labels = {"Alarm", "Bluetooth", "Mobile signal", "Clock", "Location", "Mute", "Rotation", "Volume", "Wi-Fi"};
+                boolean[] checked = new boolean[keys.length];
+                for (int i = 0; i < keys.length; i++) checked[i] = hasCsvValue(current.value, keys[i]);
+                new AlertDialog.Builder(activity).setTitle("Choose status icons to hide")
+                        .setMultiChoiceItems(labels, checked, (dialog, which, selected) -> checked[which] = selected)
+                        .setPositiveButton("Review changes", (dialog, which) -> {
+                            LinkedHashSet<String> selected = new LinkedHashSet<>();
+                            StringBuilder exact = new StringBuilder();
+                            for (int i = 0; i < keys.length; i++) if (checked[i]) {
+                                selected.add(keys[i]);
+                                if (exact.length() > 0) exact.append(", ");
+                                exact.append(labels[i]);
+                            }
+                            String chosen = exact.length() == 0 ? "None of the listed icons (show all supported icons)" : exact.toString();
+                            new AlertDialog.Builder(activity).setTitle("Apply status-icon change?")
+                                    .setMessage("Root will update Android's secure icon_blacklist setting. Selected to hide: " + chosen + ". The original value is saved before the write and read back after it. ColorOS may ignore or override it.")
+                                    .setNegativeButton("Cancel", null)
+                                    .setPositiveButton("Apply with root", (confirm, button) -> runRootOperation(activity, "Status icons", () -> RootSettingsController.setHiddenStatusIcons(activity, selected)))
+                                    .show();
+                        }).setNegativeButton("Cancel", null).show();
+            });
+        });
+    }
+
+    private static boolean hasCsvValue(String csv, String key) {
+        if (csv == null || csv.trim().isEmpty() || "null".equals(csv.trim())) return false;
+        for (String item : csv.split(",")) if (key.equals(item.trim())) return true;
+        return false;
+    }
+
+    private static void confirmQuickTileOrder(MainActivity activity) {
+        new AlertDialog.Builder(activity).setTitle("Reorder Quick Settings tiles?")
+                .setMessage("After you confirm, LockNova will use root to move only existing Wi-Fi, mobile-data, Bluetooth and airplane tiles to the front of Android's stored tile order. All other entries keep their relative order. The original setting is saved first and the result is read back. ColorOS may ignore or override the change.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Apply with root", (dialog, which) -> runRootOperation(activity, "Quick Settings order", () -> RootSettingsController.prioritizeConnectivityTiles(activity)))
+                .show();
+    }
+
+    private static void addRestoreRootButton(LinearLayout parent, MainActivity activity) {
+        TextView restore = UiKit.button(activity, "Review & restore saved SystemUI settings", false, v -> confirmRestoreRootSettings(activity));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = UiKit.dp(activity, 8);
+        parent.addView(restore, params);
+    }
+
+    private static void confirmRestoreRootSettings(MainActivity activity) {
+        org.json.JSONObject backup = SettingsStore.getRootSettingsBackup(activity);
+        StringBuilder exact = new StringBuilder();
+        for (String key : new String[]{"icon_blacklist", "sysui_qs_tiles"}) {
+            if (!backup.has(key)) continue;
+            if (exact.length() > 0) exact.append("\n");
+            exact.append("secure ").append(key).append(" = ").append(backup.optString(key, "null"));
+        }
+        new AlertDialog.Builder(activity).setTitle("Restore original SystemUI values?")
+                .setMessage("Root will restore these saved values and verify them:\n" + exact)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Restore with root", (dialog, which) -> runRootOperation(activity, "SystemUI settings restored", () -> RootSettingsController.restore(activity)))
+                .show();
+    }
+
+    private interface RootOperation { RootSettingsController.Result run(); }
+    private static void runRootOperation(MainActivity activity, String title, RootOperation operation) {
+        activity.executeSystemTask(() -> {
+            RootSettingsController.Result result = operation.run();
+            EventLog.add(activity, result.success ? "system" : "failure", result.success ? title : title + " failed", result.message);
+            activity.runOnUiThread(() -> {
+                Toast.makeText(activity, result.message, Toast.LENGTH_LONG).show();
+                activity.refreshScreen();
+            });
+        });
     }
 
     private static final GridLayout[] gridHolder = new GridLayout[1];
     private static final TextView[] layoutButtonRef = new TextView[1];
-
     private static GridLayout buildTileGrid(MainActivity activity, UiKit.Palette p, int columns) {
         String[] tiles = {"Wi-Fi\nOn", "Bluetooth\nOff", "Flashlight", "Airplane mode", "Location", "Battery saver"};
         GridLayout grid = new GridLayout(activity);
@@ -248,7 +351,7 @@ public final class ModuleScreen {
         TextView systemSettings = UiKit.button(activity, lock ? "Open Android security settings" : "Open launcher settings", false, v -> activity.openSystemSettings(lock ? Settings.ACTION_SECURITY_SETTINGS : Settings.ACTION_HOME_SETTINGS));
         UiKit.addCard(content, activity, systemSettings);
         LinearLayout limits = UiKit.card(activity);
-        limits.addView(UiKit.text(activity, lock ? "Android keeps the native lock screen and device security in control. LockNova does not bypass security or claim a global clock replacement." : "Widgets and app icons on the actual home screen are managed by the selected launcher. LockNova's swipeable widget stack below is a layout preview, not a launcher widget.", 12, p.muted, false));
+        limits.addView(UiKit.text(activity, lock ? "Android keeps the native lock screen and device security in control. LockNova does not bypass security or claim a global clock replacement." : "LockNova Home hosts real Android widgets. They share one footprint and cycle by swipe; the settings hub does not use mock cards as widgets.", 12, p.muted, false));
         UiKit.addCard(content, activity, limits);
     }
 
@@ -264,9 +367,18 @@ public final class ModuleScreen {
         UiKit.addCard(content, activity, chooseDefault);
         TextView launcherOptions = UiKit.button(activity, "Customize launcher grid and icons", false, v -> activity.navigate("Settings"));
         UiKit.addCard(content, activity, launcherOptions);
-        UiKit.section(content, activity, "In-app widget layout preview");
+        UiKit.section(content, activity, "Real Android widget stack");
         LinearLayout stack = UiKit.card(activity);
-        stack.addView(new WidgetStackView(activity));
+        int widgetCount = SettingsStore.getWidgetIds(activity).size();
+        stack.addView(UiKit.text(activity, widgetCount == 0 ? "No widgets added yet" : widgetCount + " real widgets in one shared slot", 15, p.text, true));
+        TextView stackNote = UiKit.text(activity, "Widgets are bound through Android's AppWidgetHost and retain their providers' live content and tap actions. The selected widget is the only one shown in this shared space.", 12, p.muted, false);
+        LinearLayout.LayoutParams stackNoteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stackNoteParams.topMargin = UiKit.dp(activity, 7);
+        stack.addView(stackNote, stackNoteParams);
+        TextView openStack = UiKit.button(activity, "Open LockNova Home · manage widgets", true, v -> activity.openLauncher());
+        LinearLayout.LayoutParams openStackParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        openStackParams.topMargin = UiKit.dp(activity, 11);
+        stack.addView(openStack, openStackParams);
         UiKit.addCard(content, activity, stack);
         UiKit.section(content, activity, "Wallpaper");
         addAction(content, activity, "Choose an image", "Select a local image for the home-screen wallpaper.", () -> activity.chooseWallpaper());
@@ -334,8 +446,19 @@ public final class ModuleScreen {
     private static void systemPage(LinearLayout content, MainActivity activity) {
         UiKit.Palette p = UiKit.palette(activity);
         addPill(content, activity, "PERMISSION-DEPENDENT");
-        addInfo(content, activity, "Supported system operation", "Animation-scale changes use Android's global settings through Shizuku. This does not replace the system UI or grant root.");
-        UiKit.section(content, activity, "Shizuku status");
+        addInfo(content, activity, "Root-aware system controls", "LockNova can use approved root access for a small allowlist of Android settings, or Shizuku when root is unavailable. Each system write asks first, saves the original value, reads it back and offers restoration.");
+        UiKit.section(content, activity, "Optional root access");
+        LinearLayout rootStatus = UiKit.card(activity);
+        rootStatus.addView(UiKit.text(activity, "Root is checked only when you ask LockNova to apply or inspect a root-backed setting.", 12, p.muted, false));
+        TextView checkRoot = UiKit.button(activity, "Check root access", false, v -> activity.executeSystemTask(() -> {
+            app.locknova.system.RootBridge.Result result = app.locknova.system.RootBridge.checkRoot();
+            activity.runOnUiThread(() -> Toast.makeText(activity, result.message + (result.success ? " " + result.output : ""), Toast.LENGTH_LONG).show());
+        }));
+        LinearLayout.LayoutParams rootCheckParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rootCheckParams.topMargin = UiKit.dp(activity, 9);
+        rootStatus.addView(checkRoot, rootCheckParams);
+        UiKit.addCard(content, activity, rootStatus);
+        UiKit.section(content, activity, "Shizuku fallback status");
         ShizukuBridge.State state = activity.getShizukuState();
         LinearLayout status = UiKit.card(activity);
         status.addView(UiKit.text(activity, state.message, 14, p.text, true));
@@ -366,7 +489,7 @@ public final class ModuleScreen {
             operation.addView(restore, restoreParams);
         }
         UiKit.addCard(content, activity, operation);
-        TextView unsupported = UiKit.text(activity, "Status-bar replacement, notification-shade recoloring, arbitrary tile changes, immersive mode and navigation gestures are not claimed here; ColorOS may restrict any shell operation.", 12, p.muted, false);
+        TextView unsupported = UiKit.text(activity, "SystemUI icon visibility and existing Quick Settings tile order have optional root-backed Android setting paths on supported builds. ColorOS-specific clock styles, panel recoloring, arbitrary tile creation, immersive mode and global gestures are not claimed as verified here.", 12, p.muted, false);
         content.addView(unsupported);
     }
 
@@ -430,7 +553,6 @@ public final class ModuleScreen {
         params.bottomMargin = UiKit.dp(c, 7);
         parent.addView(pill, params);
     }
-
     private static void addInfo(LinearLayout parent, Context c, String title, String text) {
         UiKit.Palette p = UiKit.palette(c);
         LinearLayout card = UiKit.card(c);
@@ -441,7 +563,6 @@ public final class ModuleScreen {
         card.addView(body, bodyParams);
         UiKit.addCard(parent, c, card);
     }
-
     private static void addSwitch(LinearLayout parent, MainActivity activity, String title, String detail, boolean initial, SwitchListener listener) {
         UiKit.Palette p = UiKit.palette(activity);
         LinearLayout row = UiKit.row(activity);
@@ -458,10 +579,8 @@ public final class ModuleScreen {
         row.addView(toggle);
         parent.addView(row);
     }
-
     private interface SwitchListener { void changed(boolean value); }
     private static void addGap(LinearLayout parent, Context context, int dp) { View gap = new View(context); parent.addView(gap, new LinearLayout.LayoutParams(1, UiKit.dp(context, dp))); }
-
     private static void addAction(LinearLayout parent, MainActivity activity, String title, String detail, Runnable action) {
         UiKit.Palette p = UiKit.palette(activity);
         LinearLayout card = UiKit.card(activity);

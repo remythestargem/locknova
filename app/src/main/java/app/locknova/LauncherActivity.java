@@ -18,7 +18,6 @@ import android.provider.Settings;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -34,14 +33,18 @@ import android.widget.Toast;
 import app.locknova.core.EventLog;
 import app.locknova.core.SettingsStore;
 import app.locknova.ui.UiKit;
+import app.locknova.ui.WidgetStackFrame;
+import app.locknova.core.WidgetStackLogic;
 
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class LauncherActivity extends Activity {
     private static final int APP_WIDGET_HOST_ID = 0x4C4E;
@@ -52,14 +55,16 @@ public final class LauncherActivity extends Activity {
     private AppWidgetManager widgetManager;
     private boolean drawerOpen;
     private String drawerQuery = "";
-    private FrameLayout widgetDeck;
+    private WidgetStackFrame widgetDeck;
+    private final Map<Integer, AppWidgetHostView> widgetViews = new HashMap<>();
     private int widgetIndex;
-    private float touchX;
-    private float touchY;
+    private int activeWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
+    private int lastCycleStep = 1;
     private int pendingWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private ComponentName pendingProvider;
     private TextView clockText;
     private TextView dateText;
+    private TextView widgetPosition;
 
     private final Runnable clockTick = new Runnable() {
         @Override public void run() {
@@ -123,73 +128,89 @@ public final class LauncherActivity extends Activity {
     private void render() {
         UiKit.Palette p = palette();
         LinearLayout outer = UiKit.column(this);
-        outer.setBackgroundColor(Color.TRANSPARENT);
+        outer.setBackgroundColor(drawerOpen ? p.background : Color.TRANSPARENT);
         if (drawerOpen) renderDrawer(outer, p); else renderHome(outer, p);
         setContentView(outer);
     }
 
     private void renderHome(LinearLayout outer, UiKit.Palette p) {
         ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
+        scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         LinearLayout content = UiKit.column(this);
-        content.setPadding(UiKit.dp(this, 18), UiKit.dp(this, 40), UiKit.dp(this, 18), UiKit.dp(this, 16));
+        content.setPadding(UiKit.dp(this, 20), UiKit.dp(this, 46), UiKit.dp(this, 20), UiKit.dp(this, 16));
         scroll.addView(content);
         outer.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         LinearLayout header = UiKit.row(this);
         LinearLayout identity = UiKit.column(this);
-        identity.addView(UiKit.text(this, "LockNova", 22, p.text, true));
-        TextView subtitle = UiKit.text(this, "Your launcher, your layout", 11, p.muted, false);
+        identity.addView(UiKit.text(this, "LockNova", 24, p.text, true));
+        TextView subtitle = UiKit.text(this, "Make your home feel like yours", 11, p.muted, false);
         LinearLayout.LayoutParams subLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         subLp.topMargin = UiKit.dp(this, 3);
         identity.addView(subtitle, subLp);
         header.addView(identity, UiKit.weightParams());
-        TextView settings = actionPill("Customize", () -> openHub(true));
-        header.addView(settings);
+        header.addView(actionPill("✦  Style", () -> openHub(true)));
         content.addView(header);
 
+        LinearLayout intro = UiKit.column(this);
+        TextView greeting = UiKit.text(this, "Your phone,\nyour rules.", 31, p.text, true);
+        greeting.setLineSpacing(0, 0.96f);
+        intro.addView(greeting);
+        TextView introCopy = UiKit.text(this, "A calmer home screen, made to fit your style.", 12, p.muted, false);
+        LinearLayout.LayoutParams introCopyParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        introCopyParams.topMargin = UiKit.dp(this, 7);
+        intro.addView(introCopy, introCopyParams);
+        LinearLayout.LayoutParams introParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        introParams.topMargin = UiKit.dp(this, 22);
+        content.addView(intro, introParams);
+
         LinearLayout clockCard = UiKit.card(this);
-        clockCard.setBackground(UiKit.shape(p.surface, p.border, 24, this));
-        clockText = UiKit.text(this, android.text.format.DateFormat.getTimeFormat(this).format(new Date()), 37, p.text, true);
+        clockCard.setBackground(UiKit.shape(withAlpha(p.surface, 225), withAlpha(p.border, 160), 26, this));
+        clockText = UiKit.text(this, android.text.format.DateFormat.getTimeFormat(this).format(new Date()), 43, p.text, true);
         dateText = UiKit.text(this, DateFormat.getDateInstance(DateFormat.FULL).format(new Date()), 12, p.muted, false);
         clockCard.addView(clockText);
         LinearLayout.LayoutParams dateLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        dateLp.topMargin = UiKit.dp(this, 4);
+        dateLp.topMargin = UiKit.dp(this, 3);
         clockCard.addView(dateText, dateLp);
         LinearLayout.LayoutParams clockLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        clockLp.topMargin = UiKit.dp(this, 18);
+        clockLp.topMargin = UiKit.dp(this, 16);
         content.addView(clockCard, clockLp);
 
         LinearLayout widgetHeading = UiKit.row(this);
-        TextView widgetTitle = UiKit.text(this, "Widget stack", 15, p.text, true);
-        widgetHeading.addView(widgetTitle, UiKit.weightParams());
-        widgetHeading.addView(UiKit.pill(this, "ANDROID WIDGETS", p.accentSoft, p.accent));
+        LinearLayout widgetTitleBlock = UiKit.column(this);
+        widgetTitleBlock.addView(UiKit.text(this, "Your widget stack", 16, p.text, true));
+        TextView stackHint = UiKit.text(this, "One shared space · swipe to switch", 10, p.muted, false);
+        LinearLayout.LayoutParams stackHintParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stackHintParams.topMargin = UiKit.dp(this, 3);
+        widgetTitleBlock.addView(stackHint, stackHintParams);
+        widgetHeading.addView(widgetTitleBlock, UiKit.weightParams());
+        widgetPosition = UiKit.pill(this, "0 / 0", withAlpha(p.accentSoft, 240), p.accent);
+        widgetHeading.addView(widgetPosition);
         LinearLayout.LayoutParams wh = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        wh.topMargin = UiKit.dp(this, 17);
+        wh.topMargin = UiKit.dp(this, 18);
         content.addView(widgetHeading, wh);
-        widgetDeck = new FrameLayout(this);
-        widgetDeck.setBackground(UiKit.shape(p.surface, p.border, 22, this));
-        LinearLayout.LayoutParams deckParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 240));
-        deckParams.topMargin = UiKit.dp(this, 8);
+
+        widgetDeck = new WidgetStackFrame(this);
+        widgetDeck.setBackground(UiKit.shape(withAlpha(p.surface, 238), withAlpha(p.border, 180), 26, this));
+        widgetDeck.setClipToOutline(true);
+        widgetDeck.setOnCycleListener(this::cycleWidget);
+        LinearLayout.LayoutParams deckParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(this, 232));
+        deckParams.topMargin = UiKit.dp(this, 9);
         content.addView(widgetDeck, deckParams);
-        widgetDeck.setOnTouchListener((view, event) -> {
-            if (event.getAction() == MotionEvent.ACTION_DOWN) { touchX = event.getX(); touchY = event.getY(); return true; }
-            if (event.getAction() == MotionEvent.ACTION_UP) {
-                float dx = event.getX() - touchX;
-                float dy = event.getY() - touchY;
-                if (Math.abs(dx) > UiKit.dp(this, 30) && Math.abs(dx) > Math.abs(dy)) cycleWidget(dx < 0 ? 1 : -1);
-                return true;
-            }
-            return true;
-        });
         renderWidget(false);
+
         LinearLayout widgetActions = UiKit.row(this);
-        TextView addWidget = actionText("Add widget", this::showWidgetProviders);
-        widgetActions.addView(addWidget, UiKit.weightParams());
-        TextView manageWidgets = actionText("Manage stack", this::showWidgetStackManager);
-        widgetActions.addView(manageWidgets);
+        widgetActions.addView(actionPill("‹", () -> cycleWidget(-1)));
+        TextView addWidget = UiKit.button(this, "+  Add widget", true, v -> showWidgetProviders());
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        addParams.leftMargin = UiKit.dp(this, 8);
+        addParams.rightMargin = UiKit.dp(this, 8);
+        widgetActions.addView(addWidget, addParams);
+        widgetActions.addView(actionPill("Manage", this::showWidgetStackManager));
+        widgetActions.addView(actionPill("›", () -> cycleWidget(1)));
         LinearLayout.LayoutParams wa = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        wa.topMargin = UiKit.dp(this, 7);
         content.addView(widgetActions, wa);
 
         LinearLayout shortcuts = UiKit.row(this);
@@ -197,17 +218,21 @@ public final class LauncherActivity extends Activity {
         shortcuts.addView(apps, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         TextView search = UiKit.button(this, "Search apps", false, v -> { drawerOpen = true; render(); });
         LinearLayout.LayoutParams searchLp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        searchLp.leftMargin = UiKit.dp(this, 8);
+        searchLp.leftMargin = UiKit.dp(this, 9);
         shortcuts.addView(search, searchLp);
         LinearLayout.LayoutParams shortcutLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        shortcutLp.topMargin = UiKit.dp(this, 15);
+        shortcutLp.topMargin = UiKit.dp(this, 14);
         content.addView(shortcuts, shortcutLp);
-        TextView hint = UiKit.text(this, "Long-press an app to pin it to the dock or open app info.", 11, p.muted, false);
+        TextView hint = UiKit.text(this, "Long-press an app to pin it to the dock or open app info.", 10, p.muted, false);
         LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         hintLp.topMargin = UiKit.dp(this, 8);
         content.addView(hint, hintLp);
 
         addDock(outer, p);
+    }
+
+    private static int withAlpha(int color, int alpha) {
+        return (color & 0x00FFFFFF) | (Math.max(0, Math.min(255, alpha)) << 24);
     }
 
     private void renderDrawer(LinearLayout outer, UiKit.Palette p) {
@@ -247,7 +272,7 @@ public final class LauncherActivity extends Activity {
         populateAppGrid(grid, resultCount, p, drawerQuery);
         search.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+            @Override public void onTextChanged(CharSequence s, int before, int count, int after) {
                 drawerQuery = s.toString();
                 populateAppGrid(grid, resultCount, p, drawerQuery);
             }
@@ -364,7 +389,7 @@ public final class LauncherActivity extends Activity {
     private void addDock(LinearLayout outer, UiKit.Palette p) {
         LinearLayout dock = UiKit.row(this);
         dock.setPadding(UiKit.dp(this, 10), UiKit.dp(this, 8), UiKit.dp(this, 10), UiKit.dp(this, 8));
-        dock.setBackground(UiKit.shape(p.surface, p.border, 22, this));
+        dock.setBackground(UiKit.shape(withAlpha(p.surface, 222), withAlpha(p.border, 165), 22, this));
         List<String> pinned = SettingsStore.getLauncherDock(this);
         if (pinned.isEmpty()) {
             TextView empty = UiKit.text(this, "Dock · long-press apps to pin", 11, p.muted, false);
@@ -420,61 +445,154 @@ public final class LauncherActivity extends Activity {
         if (widgetDeck == null) return;
         List<Integer> ids = SettingsStore.getWidgetIds(this);
         if (ids.isEmpty()) {
+            for (AppWidgetHostView view : new ArrayList<>(widgetViews.values())) {
+                view.animate().cancel();
+                if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+            }
             widgetDeck.removeAllViews();
+            widgetViews.clear();
+            activeWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID;
+            widgetIndex = 0;
+            if (widgetPosition != null) widgetPosition.setText("0 / 0");
+            widgetDeck.setContentDescription("Empty widget stack. Add Android widgets here.");
             LinearLayout empty = UiKit.column(this);
             empty.setGravity(Gravity.CENTER);
-            empty.setPadding(UiKit.dp(this, 18), UiKit.dp(this, 15), UiKit.dp(this, 18), UiKit.dp(this, 15));
+            empty.setPadding(UiKit.dp(this, 20), UiKit.dp(this, 18), UiKit.dp(this, 20), UiKit.dp(this, 18));
             UiKit.Palette p = palette();
-            empty.addView(UiKit.text(this, "Stack your Android widgets", 16, p.text, true));
-            TextView body = UiKit.text(this, "Add app widgets, then swipe left or right to cycle them in this launcher stack.", 12, p.muted, false);
+            empty.addView(UiKit.text(this, "Stack your Android widgets", 17, p.text, true));
+            TextView body = UiKit.text(this, "Add real app widgets. They share this one space; swipe or use the arrows to switch.", 12, p.muted, false);
             body.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            bp.topMargin = UiKit.dp(this, 7);
+            bp.topMargin = UiKit.dp(this, 8);
             empty.addView(body, bp);
             TextView add = UiKit.button(this, "Add first widget", true, v -> showWidgetProviders());
             LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            ap.topMargin = UiKit.dp(this, 12);
+            ap.topMargin = UiKit.dp(this, 13);
             empty.addView(add, ap);
             widgetDeck.addView(empty, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            updateDeckHeight(232);
             return;
         }
-        widgetIndex = (widgetIndex % ids.size() + ids.size()) % ids.size();
-        int id = ids.get(widgetIndex);
-        AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(id);
-        if (info == null) {
-            SettingsStore.setWidgetIds(this, removeId(ids, id));
+
+        boolean removedMissingProvider = false;
+        int sharedHeightDp = 232;
+        float density = getResources().getDisplayMetrics().density;
+        for (int id : new ArrayList<>(ids)) {
+            AppWidgetProviderInfo providerInfo = null;
+            try { providerInfo = widgetManager.getAppWidgetInfo(id); } catch (RuntimeException ignored) { }
+            if (providerInfo == null) {
+                ids.remove(Integer.valueOf(id));
+                AppWidgetHostView orphan = widgetViews.remove(id);
+                if (orphan != null && orphan.getParent() instanceof ViewGroup) ((ViewGroup) orphan.getParent()).removeView(orphan);
+                try { widgetHost.deleteAppWidgetId(id); } catch (RuntimeException ignored) { }
+                removedMissingProvider = true;
+                continue;
+            }
+            if (providerInfo.minHeight > 0) sharedHeightDp = Math.max(sharedHeightDp, Math.round(providerInfo.minHeight / density));
+        }
+        if (removedMissingProvider) {
+            SettingsStore.setWidgetIds(this, ids);
+            widgetIndex = 0;
             renderWidget(false);
             return;
         }
-        AppWidgetHostView hostView;
-        try { hostView = widgetHost.createView(this, id, info); }
-        catch (RuntimeException failure) {
-            TextView failed = UiKit.text(this, "This widget is currently unavailable. Manage the stack to remove it.", 13, palette().muted, false);
-            failed.setGravity(Gravity.CENTER);
-            widgetDeck.removeAllViews();
-            widgetDeck.addView(failed, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-            return;
+        sharedHeightDp = Math.max(210, Math.min(340, sharedHeightDp));
+        updateDeckHeight(sharedHeightDp);
+        widgetIndex = ((widgetIndex % ids.size()) + ids.size()) % ids.size();
+        int nextId = ids.get(widgetIndex);
+        int oldId = activeWidgetId;
+
+        for (Integer knownId : new ArrayList<>(widgetViews.keySet())) {
+            if (ids.contains(knownId)) continue;
+            AppWidgetHostView stale = widgetViews.remove(knownId);
+            if (stale != null && stale.getParent() instanceof ViewGroup) ((ViewGroup) stale.getParent()).removeView(stale);
         }
-        widgetDeck.setBackground(UiKit.shape(palette().surface, palette().border, 22, this));
-        if (animate && widgetDeck.getChildCount() > 0 && SettingsStore.getMotion(this)) {
-            View old = widgetDeck.getChildAt(0);
-            old.animate().alpha(0f).translationX(-UiKit.dp(this, 15)).setDuration(100).withEndAction(() -> {
-                widgetDeck.removeAllViews();
-                hostView.setAlpha(0f);
-                hostView.setTranslationX(UiKit.dp(this, 15));
+        for (int child = widgetDeck.getChildCount() - 1; child >= 0; child--) {
+            View view = widgetDeck.getChildAt(child);
+            if (!(view instanceof AppWidgetHostView)) widgetDeck.removeViewAt(child);
+        }
+
+        int widthDp = Math.max(180, Math.round(getResources().getDisplayMetrics().widthPixels / density) - 40);
+        for (int id : ids) {
+            AppWidgetProviderInfo info = widgetManager.getAppWidgetInfo(id);
+            AppWidgetHostView hostView = widgetViews.get(id);
+            if (hostView == null) {
+                try {
+                    hostView = widgetHost.createView(this, id, info);
+                    widgetViews.put(id, hostView);
+                } catch (RuntimeException failure) {
+                    TextView failed = UiKit.text(this, "This Android widget could not be loaded. Remove it in Manage stack and add it again.", 13, palette().muted, false);
+                    failed.setGravity(Gravity.CENTER);
+                    widgetDeck.removeAllViews();
+                    widgetDeck.addView(failed, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    if (widgetPosition != null) widgetPosition.setText(WidgetStackLogic.positionLabel(widgetIndex, ids.size()));
+                    return;
+                }
+            }
+            if (hostView.getParent() instanceof ViewGroup && hostView.getParent() != widgetDeck) {
+                ((ViewGroup) hostView.getParent()).removeView(hostView);
+            }
+            if (hostView.getParent() == null) {
                 widgetDeck.addView(hostView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                hostView.animate().alpha(1f).translationX(0f).setDuration(220).start();
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 16) {
+                Bundle options = new Bundle();
+                options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, widthDp);
+                options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, widthDp);
+                options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, sharedHeightDp);
+                options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, sharedHeightDp);
+                try { hostView.updateAppWidgetSize(options, widthDp, sharedHeightDp, widthDp, sharedHeightDp); } catch (RuntimeException ignored) { }
+            }
+        }
+
+        AppWidgetProviderInfo activeInfo = widgetManager.getAppWidgetInfo(nextId);
+        AppWidgetHostView nextView = widgetViews.get(nextId);
+        AppWidgetHostView previousView = widgetViews.get(oldId);
+        if (nextView == null) return;
+        widgetDeck.setBackground(UiKit.shape(withAlpha(palette().surface, 238), withAlpha(palette().border, 180), 26, this));
+        widgetDeck.setContentDescription((activeInfo == null ? "Android widget" : activeInfo.loadLabel(getPackageManager())) + ", " + WidgetStackLogic.positionLabel(widgetIndex, ids.size()) + ". Swipe left or right to switch widgets.");
+        if (widgetPosition != null) widgetPosition.setText(WidgetStackLogic.positionLabel(widgetIndex, ids.size()));
+
+        boolean transition = animate && SettingsStore.getMotion(this) && previousView != null && previousView != nextView;
+        for (AppWidgetHostView view : widgetViews.values()) {
+            view.animate().cancel();
+            boolean keepVisible = view == nextView || (transition && view == previousView);
+            view.setVisibility(keepVisible ? View.VISIBLE : View.INVISIBLE);
+            view.setAlpha(view == nextView && transition ? 0f : 1f);
+            view.setTranslationX(0f);
+        }
+        nextView.bringToFront();
+        if (transition) {
+            int direction = lastCycleStep > 0 ? 1 : -1;
+            float distance = UiKit.dp(this, 24);
+            nextView.setTranslationX(direction * distance);
+            nextView.animate().alpha(1f).translationX(0f).setDuration(220).start();
+            previousView.animate().alpha(0f).translationX(-direction * distance).setDuration(175).withEndAction(() -> {
+                previousView.setVisibility(View.INVISIBLE);
+                previousView.setAlpha(1f);
+                previousView.setTranslationX(0f);
             }).start();
-        } else {
-            widgetDeck.removeAllViews();
-            widgetDeck.addView(hostView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        activeWidgetId = nextId;
+    }
+
+    private void updateDeckHeight(int heightDp) {
+        if (widgetDeck == null) return;
+        ViewGroup.LayoutParams params = widgetDeck.getLayoutParams();
+        if (params != null && params.height != UiKit.dp(this, heightDp)) {
+            params.height = UiKit.dp(this, heightDp);
+            widgetDeck.setLayoutParams(params);
         }
     }
 
     private void cycleWidget(int step) {
         List<Integer> ids = SettingsStore.getWidgetIds(this);
-        if (ids.size() < 2) { if (!ids.isEmpty()) toast("Add another widget to cycle the stack."); return; }
-        widgetIndex = (widgetIndex + step + ids.size()) % ids.size();
+        if (ids.size() < 2) {
+            if (!ids.isEmpty()) toast("Add another Android widget to this shared space to cycle the stack.");
+            return;
+        }
+        lastCycleStep = step;
+        widgetIndex = WidgetStackLogic.nextIndex(widgetIndex, step, ids.size());
         renderWidget(true);
     }
 

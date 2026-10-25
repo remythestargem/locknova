@@ -1,12 +1,14 @@
 package app.locknova.screens;
 
 import android.app.Activity;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -16,7 +18,7 @@ import app.locknova.core.SettingsStore;
 import app.locknova.system.ShizukuBridge;
 import app.locknova.system.WallpaperController;
 import app.locknova.ui.UiKit;
-import app.locknova.ui.WidgetStackView;
+import app.locknova.ui.SpringLandscapeView;
 
 import java.text.DateFormat;
 import java.util.Date;
@@ -47,18 +49,28 @@ public final class HomeScreen {
         content.addView(top);
 
         UiKit.addGap(content, activity, 18);
-        LinearLayout hero = UiKit.card(activity);
+        FrameLayout hero = new FrameLayout(activity);
         hero.setBackground(UiKit.shape(p.accentSoft, p.border, 26, activity));
+        hero.setClipToOutline(true);
+        hero.addView(new SpringLandscapeView(activity), new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View wash = new View(activity);
+        wash.setBackground(new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xEFFFFFFF, 0xC8FFFFFF, 0x28FFFFFF}));
+        hero.addView(wash, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        LinearLayout heroCopy = UiKit.column(activity);
+        heroCopy.setPadding(UiKit.dp(activity, 18), UiKit.dp(activity, 17), UiKit.dp(activity, 18), UiKit.dp(activity, 15));
         TextView eyebrow = UiKit.text(activity, "PERSONALIZATION, WITH HONEST LIMITS", 10, p.accent, true);
         eyebrow.setLetterSpacing(0.08f);
-        hero.addView(eyebrow);
-        UiKit.addGap(hero, activity, 9);
-        hero.addView(UiKit.text(activity, "Your phone,\nyour rules.", 26, p.text, true));
-        TextView heroBody = UiKit.text(activity, "Preview freely. Apply only what Android and ColorOS allow.", 13, p.muted, false);
+        heroCopy.addView(eyebrow);
+        UiKit.addGap(heroCopy, activity, 8);
+        heroCopy.addView(UiKit.text(activity, "Your phone,\nyour rules.", 26, 0xFF242843, true));
+        TextView heroBody = UiKit.text(activity, "A little more you, with Android and ColorOS limits made clear.", 12, 0xFF555A73, false);
         LinearLayout.LayoutParams heroBodyParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         heroBodyParams.topMargin = UiKit.dp(activity, 9);
-        hero.addView(heroBody, heroBodyParams);
-        UiKit.addCard(content, activity, hero);
+        heroCopy.addView(heroBody, heroBodyParams);
+        hero.addView(heroCopy, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.TOP | Gravity.LEFT));
+        LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(activity, 184));
+        heroParams.bottomMargin = UiKit.dp(activity, 10);
+        content.addView(hero, heroParams);
 
         UiKit.section(content, activity, "LockNova Home");
         LinearLayout launcherCard = UiKit.card(activity);
@@ -148,9 +160,18 @@ public final class HomeScreen {
         }
         UiKit.addCard(content, activity, restore);
 
-        UiKit.section(content, activity, "In-app widget layout preview");
+        UiKit.section(content, activity, "Real Android widgets");
         LinearLayout stackCard = UiKit.card(activity);
-        stackCard.addView(new WidgetStackView(activity));
+        int widgetCount = SettingsStore.getWidgetIds(activity).size();
+        stackCard.addView(UiKit.text(activity, widgetCount == 0 ? "Your stack is ready" : widgetCount + " widgets share one home-screen space", 15, p.text, true));
+        TextView stackNote = UiKit.text(activity, widgetCount == 0 ? "Add actual app-provided Android widgets in LockNova Home. The preview cards are not used for this stack." : "These are real Android app widgets—not sample cards. Swipe through them in the launcher without using separate vertical slots.", 12, p.muted, false);
+        LinearLayout.LayoutParams stackNoteParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stackNoteParams.topMargin = UiKit.dp(activity, 6);
+        stackCard.addView(stackNote, stackNoteParams);
+        TextView openWidgetStack = UiKit.button(activity, "Open widget stack", true, v -> activity.openLauncher());
+        LinearLayout.LayoutParams stackButtonParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        stackButtonParams.topMargin = UiKit.dp(activity, 10);
+        stackCard.addView(openWidgetStack, stackButtonParams);
         UiKit.addCard(content, activity, stackCard);
 
         UiKit.section(content, activity, "Explore modules");
